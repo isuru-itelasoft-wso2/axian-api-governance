@@ -3,489 +3,525 @@ pipeline {
     agent any
 
     environment {
+
+        // ==========================================
+        // APIM ENVIRONMENTS
+        // ==========================================
+
         MVOLA_APIM_URL = 'https://13.49.18.52:9443'
+        GROUP_APIM_URL = 'https://13.60.222.145:9443'
+        TIGO_APIM_URL  = 'https://13.62.128.136:9443'
     }
 
     stages {
 
+        // =========================================================
+        // CHECKOUT
+        // =========================================================
+
         stage('Checkout Governance') {
+
             steps {
+
                 checkout scm
 
                 sh '''
                     set -e
 
                     echo "======================================"
-                    echo "AXIAN CENTRAL GOVERNANCE"
+                    echo "AXIAN CENTRAL API GOVERNANCE"
                     echo "======================================"
 
+                    echo ""
                     echo "Governance Version:"
                     cat version
 
                     echo ""
                     echo "Ruleset:"
-                    ls -l rules/
+                    ls -lh rules/
 
                     echo ""
                     echo "Policy:"
-                    ls -l policy/
+                    ls -lh policy/
                 '''
             }
         }
 
 
+        // =========================================================
+        // VALIDATE CENTRAL GOVERNANCE PACKAGE
+        // =========================================================
+
         stage('Validate Governance Package') {
+
             steps {
+
                 sh '''
                     set -e
 
+                    echo "Validating governance package..."
+
                     test -f version
                     test -f rules/group-api-standards.yaml
-                    test -f policy/group-api-governance.json
 
+                    echo ""
                     echo "Governance package validation PASSED."
                 '''
             }
         }
 
 
-        stage('Test Mvola APIM Connection') {
-            steps {
+        // =========================================================
+        // SYNC GOVERNANCE TO ALL ENVIRONMENTS
+        // =========================================================
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'mvola-governance-admin',
-                        usernameVariable: 'MVOLA_USER',
-                        passwordVariable: 'MVOLA_PASS'
-                    )
-                ]) {
-
-                    sh '''
-                        set -e
-
-                        echo "Testing Mvola APIM connection..."
-
-                        HTTP_CODE=$(curl -sk \
-                            -o /tmp/mvola-response.json \
-                            -w "%{http_code}" \
-                            -u "$MVOLA_USER:$MVOLA_PASS" \
-                            -H "Accept: application/json" \
-                            "$MVOLA_APIM_URL/api/am/governance/v1/rulesets")
-
-                        echo "HTTP Status: $HTTP_CODE"
-
-                        if [ "$HTTP_CODE" != "200" ]; then
-                            echo "ERROR: Unable to connect to Mvola Governance API."
-                            cat /tmp/mvola-response.json
-                            exit 1
-                        fi
-
-                        echo "Mvola APIM connection successful."
-                    '''
-                }
-            }
-        }
-
-
-	stage('Find Group Ruleset') {
-    steps {
-
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'mvola-governance-admin',
-                usernameVariable: 'MVOLA_USER',
-                passwordVariable: 'MVOLA_PASS'
-            )
-        ]) {
-
-            sh '''
-                set -e
-
-                echo "======================================"
-                echo "Finding Group Governance Ruleset"
-                echo "======================================"
-
-                curl -sk \
-                    -u "$MVOLA_USER:$MVOLA_PASS" \
-                    -H "Accept: application/json" \
-                    "$MVOLA_APIM_URL/api/am/governance/v1/rulesets?limit=100" \
-                    > ruleset-response.json
-
-                echo "Rulesets returned by Mvola:"
-                jq '.list[] | {id, name, ruleType, artifactType}' ruleset-response.json
-
-                RULESET_ID=$(jq -r '
-                    .list[]
-                    | select(.name == "Group Level API Standards")
-                    | .id
-                ' ruleset-response.json | head -n 1)
-
-                if [ -z "$RULESET_ID" ]; then
-
-                    echo "Ruleset does not exist."
-                    echo "CREATE" > ruleset-action
-
-                else
-
-                    echo "Ruleset found."
-                    echo "Ruleset ID: $RULESET_ID"
-
-                    echo "$RULESET_ID" > ruleset-id
-                    echo "UPDATE" > ruleset-action
-
-                fi
-            '''
-        }
-    }
-}
-
-        stage('Create Group Ruleset') {
-
-            when {
-                expression {
-                    fileExists('ruleset-action') &&
-                    readFile('ruleset-action').trim() == 'CREATE'
-                }
-            }
+        stage('Deploy Governance to All Environments') {
 
             steps {
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'mvola-governance-admin',
-                        usernameVariable: 'MVOLA_USER',
-                        passwordVariable: 'MVOLA_PASS'
-                    )
-                ]) {
-
-                    sh '''
-                        set -e
-
-                        echo "Creating governance ruleset..."
-
-                        curl -sk \
-                            -u "$MVOLA_USER:$MVOLA_PASS" \
-                            -X POST \
-                            "$MVOLA_APIM_URL/api/am/governance/v1/rulesets" \
-                            -H "Accept: application/json" \
-                            -F "name=Group Level API Standards" \
-                            -F "description=Axian Group API Governance Standards" \
-                            -F "ruleType=API_METADATA" \
-                            -F "artifactType=REST_API" \
-                            -F "ruleCategory=SPECTRAL" \
-                            -F "rulesetContent=@rules/group-api-standards.yaml" \
-                            > ruleset-created.json
-
-                        echo "Create response:"
-                        jq . ruleset-created.json
-
-                        RULESET_ID=$(jq -r '.id // empty' ruleset-created.json)
-
-                        if [ -z "$RULESET_ID" ]; then
-                            echo "ERROR: Ruleset creation failed."
-                            exit 1
-                        fi
-
-                        echo "$RULESET_ID" > ruleset-id
-
-                        echo "Ruleset created successfully."
-                        echo "Ruleset ID: $RULESET_ID"
-                    '''
-                }
-            }
-        }
-
-	
-	stage('Update Group Ruleset') {
-
-    when {
-        expression {
-            fileExists('ruleset-action') &&
-            readFile('ruleset-action').trim() == 'UPDATE'
-        }
-    }
-
-    steps {
-
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'mvola-governance-admin',
-                usernameVariable: 'MVOLA_USER',
-                passwordVariable: 'MVOLA_PASS'
-            )
-        ]) {
-
-            sh '''
-                set -e
-
-                RULESET_ID=$(cat ruleset-id)
-
-                echo "======================================"
-                echo "Updating Mvola Governance Ruleset"
-                echo "======================================"
-
-                echo "Ruleset ID: $RULESET_ID"
-
-                HTTP_CODE=$(curl -sk \
-                    -u "$MVOLA_USER:$MVOLA_PASS" \
-                    -o ruleset-updated.json \
-                    -w "%{http_code}" \
-                    -X PUT \
-                    "$MVOLA_APIM_URL/api/am/governance/v1/rulesets/$RULESET_ID" \
-                    -H "Accept: application/json" \
-                    -F "name=Group Level API Standards" \
-                    -F "description=Axian Group API Governance Standards" \
-                    -F "ruleType=API_METADATA" \
-                    -F "artifactType=REST_API" \
-                    -F "ruleCategory=SPECTRAL" \
-                    -F "rulesetContent=@rules/group-api-standards.yaml"
-                )
-
-                echo ""
-                echo "HTTP Status: $HTTP_CODE"
-
-                echo ""
-                echo "Update response:"
-                jq . ruleset-updated.json || cat ruleset-updated.json
-
-                if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-                    echo ""
-                    echo "ERROR: Ruleset update failed."
-                    echo "HTTP Status: $HTTP_CODE"
-                    exit 1
-                fi
+                script {
+
+                    def environments = [
+
+                        [
+                            name: 'GROUP',
+                            url: env.GROUP_APIM_URL,
+                            credentialId: 'group-governance-admin',
+                            rulesetName: 'Group Level API Standards',
+                            policyName: 'Group API Design Standards'
+                        ],
+
+                        [
+                            name: 'MVOLA',
+                            url: env.MVOLA_APIM_URL,
+                            credentialId: 'mvola-governance-admin',
+                            rulesetName: 'Group Level API Standards',
+                            policyName: 'Group API Design Standards'
+                        ],
+
+                        [
+                            name: 'TIGO',
+                            url: env.TIGO_APIM_URL,
+                            credentialId: 'tigo-governance-admin',
+                            rulesetName: 'Group Level API Standards',
+                            policyName: 'Group API Design Standards'
+                        ]
+                    ]
+
+
+                    for (target in environments) {
+
+                        echo ""
+                        echo "=============================================="
+                        echo " GOVERNANCE DEPLOYMENT: ${target.name}"
+                        echo "=============================================="
+                        echo "APIM URL: ${target.url}"
+                        echo "Ruleset : ${target.rulesetName}"
+                        echo "Policy  : ${target.policyName}"
+                        echo "=============================================="
 
-                echo ""
-                echo "Ruleset update API call succeeded."
-            '''
-        }
-    }
-}
+
+                        withCredentials([
+                            usernamePassword(
+                                credentialsId: target.credentialId,
+                                usernameVariable: 'APIM_USER',
+                                passwordVariable: 'APIM_PASS'
+                            )
+                        ]) {
+
+                            // =================================================
+                            // TEST CONNECTION
+                            // =================================================
+
+                            sh """
+                                set -e
+
+                                echo ""
+                                echo "Testing ${target.name} APIM connection..."
+
+                                HTTP_CODE=\\$(curl -sk \\
+                                    -o /tmp/${target.name}-connection.json \\
+                                    -w "%{http_code}" \\
+                                    -u "\\$APIM_USER:\\$APIM_PASS" \\
+                                    -H "Accept: application/json" \\
+                                    "${target.url}/api/am/governance/v1/rulesets")
+
+                                echo "HTTP Status: \\$HTTP_CODE"
+
+                                if [ "\\$HTTP_CODE" != "200" ]; then
+                                    echo ""
+                                    echo "ERROR: Unable to connect to ${target.name}."
+                                    cat /tmp/${target.name}-connection.json
+                                    exit 1
+                                fi
+
+                                echo "${target.name} connection successful."
+                            """
+
+
+                            // =================================================
+                            // FIND RULESET
+                            // =================================================
+
+                            sh """
+                                set -e
+
+                                echo ""
+                                echo "Finding ruleset in ${target.name}..."
+
+                                curl -sk \\
+                                    -u "\\$APIM_USER:\\$APIM_PASS" \\
+                                    -H "Accept: application/json" \\
+                                    "${target.url}/api/am/governance/v1/rulesets?limit=100" \\
+                                    > ${target.name}-rulesets.json
+
+                                echo ""
+                                echo "Available rulesets:"
+
+                                jq '.list[] | {
+                                    id,
+                                    name,
+                                    ruleType,
+                                    artifactType
+                                }' ${target.name}-rulesets.json
+
+                                RULESET_ID=\\$(jq -r '
+                                    .list[]
+                                    | select(.name == "${target.rulesetName}")
+                                    | .id
+                                ' ${target.name}-rulesets.json | head -n 1)
 
+                                if [ -z "\\$RULESET_ID" ]; then
 
-        stage('Verify Group Ruleset') {
+                                    echo ""
+                                    echo "Ruleset does not exist in ${target.name}."
+                                    echo "CREATE" > ${target.name}-ruleset-action
+
+                                else
+
+                                    echo ""
+                                    echo "Ruleset found:"
+                                    echo "\\$RULESET_ID"
+
+                                    echo "\\$RULESET_ID" > ${target.name}-ruleset-id
+                                    echo "UPDATE" > ${target.name}-ruleset-action
+
+                                fi
+                            """
+
+
+                            // =================================================
+                            // CREATE RULESET
+                            // =================================================
+
+                            sh """
+                                set -e
+
+                                ACTION=\\$(cat ${target.name}-ruleset-action)
+
+                                if [ "\\$ACTION" != "CREATE" ]; then
+                                    echo "Ruleset already exists."
+                                    echo "Skipping CREATE."
+                                    exit 0
+                                fi
+
+                                echo ""
+                                echo "Creating ruleset in ${target.name}..."
+
+                                HTTP_CODE=\\$(curl -sk \\
+                                    -u "\\$APIM_USER:\\$APIM_PASS" \\
+                                    -o ${target.name}-ruleset-created.json \\
+                                    -w "%{http_code}" \\
+                                    -X POST \\
+                                    "${target.url}/api/am/governance/v1/rulesets" \\
+                                    -H "Accept: application/json" \\
+                                    -F "name=${target.rulesetName}" \\
+                                    -F "description=Axian Group API Governance Standards" \\
+                                    -F "ruleType=API_METADATA" \\
+                                    -F "artifactType=REST_API" \\
+                                    -F "ruleCategory=SPECTRAL" \\
+                                    -F "rulesetContent=@rules/group-api-standards.yaml"
+                                )
 
-            steps {
+                                echo ""
+                                echo "HTTP Status: \\$HTTP_CODE"
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'mvola-governance-admin',
-                        usernameVariable: 'MVOLA_USER',
-                        passwordVariable: 'MVOLA_PASS'
-                    )
-                ]) {
+                                jq . ${target.name}-ruleset-created.json || true
 
-                    sh '''
-                        set -e
+                                if [ "\\$HTTP_CODE" -lt 200 ] || [ "\\$HTTP_CODE" -ge 300 ]; then
+                                    echo ""
+                                    echo "ERROR: Ruleset creation failed in ${target.name}."
+                                    exit 1
+                                fi
+
+                                RULESET_ID=\\$(jq -r '.id // empty' ${target.name}-ruleset-created.json)
 
-                        RULESET_ID=$(cat ruleset-id)
+                                if [ -z "\\$RULESET_ID" ]; then
+                                    echo ""
+                                    echo "ERROR: Ruleset ID was not returned."
+                                    exit 1
+                                fi
 
-                        echo "Verifying ruleset: $RULESET_ID"
+                                echo "\\$RULESET_ID" > ${target.name}-ruleset-id
 
-                        curl -sk \
-                            -u "$MVOLA_USER:$MVOLA_PASS" \
-                            -H "Accept: application/json" \
-                            "$MVOLA_APIM_URL/api/am/governance/v1/rulesets/$RULESET_ID" \
-                            > ruleset-verify.json
+                                echo ""
+                                echo "Ruleset created successfully."
+                                echo "Ruleset ID: \\$RULESET_ID"
+                            """
 
-                        jq . ruleset-verify.json
 
-                        NAME=$(jq -r '.name // empty' ruleset-verify.json)
+                            // =================================================
+                            // UPDATE RULESET
+                            // =================================================
 
-                        if [ "$NAME" != "Group Level API Standards" ]; then
-                            echo "ERROR: Ruleset verification failed."
-                            exit 1
-                        fi
+                            sh """
+                                set -e
 
-                        echo "Ruleset verification PASSED."
-                    '''
-                }
-            }
-        }
+                                ACTION=\\$(cat ${target.name}-ruleset-action)
 
+                                if [ "\\$ACTION" != "UPDATE" ]; then
+                                    echo "Ruleset was created."
+                                    echo "Skipping UPDATE."
+                                    exit 0
+                                fi
 
-        stage('Find Group Governance Policy') {
+                                RULESET_ID=\\$(cat ${target.name}-ruleset-id)
 
-            steps {
+                                echo ""
+                                echo "Updating ruleset in ${target.name}..."
+                                echo "Ruleset ID: \\$RULESET_ID"
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'mvola-governance-admin',
-                        usernameVariable: 'MVOLA_USER',
-                        passwordVariable: 'MVOLA_PASS'
-                    )
-                ]) {
+                                HTTP_CODE=\\$(curl -sk \\
+                                    -u "\\$APIM_USER:\\$APIM_PASS" \\
+                                    -o ${target.name}-ruleset-updated.json \\
+                                    -w "%{http_code}" \\
+                                    -X PUT \\
+                                    "${target.url}/api/am/governance/v1/rulesets/\\$RULESET_ID" \\
+                                    -H "Accept: application/json" \\
+                                    -F "name=${target.rulesetName}" \\
+                                    -F "description=Axian Group API Governance Standards" \\
+                                    -F "ruleType=API_METADATA" \\
+                                    -F "artifactType=REST_API" \\
+                                    -F "ruleCategory=SPECTRAL" \\
+                                    -F "rulesetContent=@rules/group-api-standards.yaml"
+                                )
 
-                    sh '''
-                        set -e
+                                echo ""
+                                echo "HTTP Status: \\$HTTP_CODE"
 
-                        echo "Searching for Group API Design Standards policy..."
+                                jq . ${target.name}-ruleset-updated.json || true
 
-                        curl -sk \
-                            -u "$MVOLA_USER:$MVOLA_PASS" \
-                            -H "Accept: application/json" \
-                            --get \
-                            --data-urlencode "query=name:Group API Design Standards" \
-                            "$MVOLA_APIM_URL/api/am/governance/v1/policies" \
-                            > policy-response.json
+                                if [ "\\$HTTP_CODE" -lt 200 ] || [ "\\$HTTP_CODE" -ge 300 ]; then
+                                    echo ""
+                                    echo "ERROR: Ruleset update failed in ${target.name}."
+                                    exit 1
+                                fi
 
-                        echo "Policy response:"
-                        jq . policy-response.json
+                                echo ""
+                                echo "${target.name} ruleset updated successfully."
+                            """
 
-                        POLICY_ID=$(jq -r '.list[0].id // empty' policy-response.json)
 
-                        if [ -z "$POLICY_ID" ]; then
-                            echo "ERROR: Group API Design Standards policy not found."
-                            exit 1
-                        fi
+                            // =================================================
+                            // VERIFY RULESET
+                            // =================================================
 
-                        echo "$POLICY_ID" > policy-id
+                            sh """
+                                set -e
 
-                        echo "Policy found:"
-                        echo "$POLICY_ID"
-                    '''
-                }
-            }
-        }
+                                RULESET_ID=\\$(cat ${target.name}-ruleset-id)
 
+                                echo ""
+                                echo "Verifying ${target.name} ruleset..."
 
-        stage('Get Existing Group Policy') {
+                                curl -sk \\
+                                    -u "\\$APIM_USER:\\$APIM_PASS" \\
+                                    -H "Accept: application/json" \\
+                                    "${target.url}/api/am/governance/v1/rulesets/\\$RULESET_ID" \\
+                                    > ${target.name}-ruleset-verify.json
 
-            steps {
+                                jq . ${target.name}-ruleset-verify.json
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'mvola-governance-admin',
-                        usernameVariable: 'MVOLA_USER',
-                        passwordVariable: 'MVOLA_PASS'
-                    )
-                ]) {
+                                NAME=\\$(jq -r '.name // empty' ${target.name}-ruleset-verify.json)
 
-                    sh '''
-                        set -e
+                                if [ "\\$NAME" != "${target.rulesetName}" ]; then
+                                    echo ""
+                                    echo "ERROR: Ruleset verification failed in ${target.name}."
+                                    exit 1
+                                fi
 
-                        POLICY_ID=$(cat policy-id)
+                                echo ""
+                                echo "${target.name} ruleset verification PASSED."
+                            """
 
-                        echo "Getting policy: $POLICY_ID"
 
-                        curl -sk \
-                            -u "$MVOLA_USER:$MVOLA_PASS" \
-                            -H "Accept: application/json" \
-                            "$MVOLA_APIM_URL/api/am/governance/v1/policies/$POLICY_ID" \
-                            > policy-current.json
+                            // =================================================
+                            // FIND POLICY
+                            // =================================================
 
-                        jq . policy-current.json
-                    '''
-                }
-            }
-        }
+                            sh """
+                                set -e
 
+                                echo ""
+                                echo "Finding governance policy in ${target.name}..."
 
-        stage('Update Group Policy') {
+                                curl -sk \\
+                                    -u "\\$APIM_USER:\\$APIM_PASS" \\
+                                    -H "Accept: application/json" \\
+                                    --get \\
+                                    --data-urlencode "query=name:${target.policyName}" \\
+                                    "${target.url}/api/am/governance/v1/policies" \\
+                                    > ${target.name}-policy-response.json
 
-            steps {
+                                jq . ${target.name}-policy-response.json
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'mvola-governance-admin',
-                        usernameVariable: 'MVOLA_USER',
-                        passwordVariable: 'MVOLA_PASS'
-                    )
-                ]) {
+                                POLICY_ID=\\$(jq -r '.list[0].id // empty' ${target.name}-policy-response.json)
 
-                    sh '''
-                        set -e
+                                if [ -z "\\$POLICY_ID" ]; then
+                                    echo ""
+                                    echo "ERROR: Policy '${target.policyName}' not found in ${target.name}."
+                                    exit 1
+                                fi
 
-                        POLICY_ID=$(cat policy-id)
-                        RULESET_ID=$(cat ruleset-id)
+                                echo "\\$POLICY_ID" > ${target.name}-policy-id
 
-                        echo "Updating policy..."
-                        echo "Policy ID : $POLICY_ID"
-                        echo "Ruleset ID: $RULESET_ID"
+                                echo ""
+                                echo "Policy found:"
+                                echo "\\$POLICY_ID"
+                            """
 
-                        jq \
-                            --arg ruleset "$RULESET_ID" \
-                            '.rulesets = ((.rulesets // []) + [$ruleset] | unique)' \
-                            policy-current.json \
-                            > policy-updated.json
 
-                        echo "Updated policy:"
-                        jq . policy-updated.json
+                            // =================================================
+                            // GET POLICY
+                            // =================================================
 
-                        curl -sk \
-                            -u "$MVOLA_USER:$MVOLA_PASS" \
-                            -X PUT \
-                            "$MVOLA_APIM_URL/api/am/governance/v1/policies/$POLICY_ID" \
-                            -H "Accept: application/json" \
-                            -H "Content-Type: application/json" \
-                            --data @policy-updated.json \
-                            > policy-updated-response.json
+                            sh """
+                                set -e
 
-                        echo "Policy update response:"
-                        jq . policy-updated-response.json
+                                POLICY_ID=\\$(cat ${target.name}-policy-id)
 
-                        echo "Policy updated successfully."
-                    '''
-                }
-            }
-        }
+                                echo ""
+                                echo "Getting existing policy..."
 
+                                curl -sk \\
+                                    -u "\\$APIM_USER:\\$APIM_PASS" \\
+                                    -H "Accept: application/json" \\
+                                    "${target.url}/api/am/governance/v1/policies/\\$POLICY_ID" \\
+                                    > ${target.name}-policy-current.json
 
-        stage('Verify Group Policy') {
+                                jq . ${target.name}-policy-current.json
+                            """
 
-            steps {
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'mvola-governance-admin',
-                        usernameVariable: 'MVOLA_USER',
-                        passwordVariable: 'MVOLA_PASS'
-                    )
-                ]) {
+                            // =================================================
+                            // UPDATE POLICY
+                            // =================================================
 
-                    sh '''
-                        set -e
+                            sh """
+                                set -e
 
-                        POLICY_ID=$(cat policy-id)
+                                POLICY_ID=\\$(cat ${target.name}-policy-id)
+                                RULESET_ID=\\$(cat ${target.name}-ruleset-id)
 
-                        echo "Verifying policy..."
+                                echo ""
+                                echo "Associating ruleset with policy..."
 
-                        curl -sk \
-                            -u "$MVOLA_USER:$MVOLA_PASS" \
-                            -H "Accept: application/json" \
-                            "$MVOLA_APIM_URL/api/am/governance/v1/policies/$POLICY_ID" \
-                            > policy-verify.json
+                                jq \\
+                                    --arg ruleset "\\$RULESET_ID" \\
+                                    '.rulesets = ((.rulesets // []) + [\\$ruleset] | unique)' \\
+                                    ${target.name}-policy-current.json \\
+                                    > ${target.name}-policy-updated.json
 
-                        jq . policy-verify.json
+                                echo ""
+                                echo "Updated policy:"
+                                jq . ${target.name}-policy-updated.json
 
-                        echo "Policy verification completed."
-                    '''
+                                HTTP_CODE=\\$(curl -sk \\
+                                    -u "\\$APIM_USER:\\$APIM_PASS" \\
+                                    -o ${target.name}-policy-updated-response.json \\
+                                    -w "%{http_code}" \\
+                                    -X PUT \\
+                                    "${target.url}/api/am/governance/v1/policies/\\$POLICY_ID" \\
+                                    -H "Accept: application/json" \\
+                                    -H "Content-Type: application/json" \\
+                                    --data @${target.name}-policy-updated.json
+                                )
+
+                                echo ""
+                                echo "HTTP Status: \\$HTTP_CODE"
+
+                                jq . ${target.name}-policy-updated-response.json || true
+
+                                if [ "\\$HTTP_CODE" -lt 200 ] || [ "\\$HTTP_CODE" -ge 300 ]; then
+                                    echo ""
+                                    echo "ERROR: Policy update failed in ${target.name}."
+                                    exit 1
+                                fi
+
+                                echo ""
+                                echo "${target.name} policy updated successfully."
+                            """
+
+
+                            // =================================================
+                            // ENVIRONMENT COMPLETE
+                            // =================================================
+
+                            echo ""
+                            echo "=============================================="
+                            echo "${target.name} GOVERNANCE SYNCHRONIZATION PASSED"
+                            echo "=============================================="
+                        }
+                    }
                 }
             }
         }
     }
 
+
+    // =========================================================
+    // POST ACTIONS
+    // =========================================================
 
     post {
 
         success {
+
             echo '''
-========================================
-AXIAN GOVERNANCE RELEASE SUCCESS
-========================================
-Mvola governance ruleset and policy
-have been successfully synchronized.
-========================================
+=================================================
+ AXIAN CENTRAL GOVERNANCE RELEASE SUCCESS
+=================================================
+
+Governance rules have been successfully
+synchronized across:
+
+  ✓ Group
+  ✓ Mvola
+  ✓ Tigo
+
+The central Git repository is the source
+of truth for API governance.
+
+=================================================
 '''
         }
 
         failure {
+
             echo '''
-========================================
-AXIAN GOVERNANCE RELEASE FAILED
-========================================
-Mvola governance synchronization failed.
-========================================
+=================================================
+ AXIAN CENTRAL GOVERNANCE RELEASE FAILED
+=================================================
+
+Governance synchronization failed.
+
+At least one target environment could not
+be synchronized.
+
+API governance release should be considered
+BLOCKED until the issue is resolved.
+
+=================================================
 '''
         }
     }
