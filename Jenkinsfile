@@ -173,7 +173,7 @@ pipeline {
                             -F "ruleType=API_METADATA" \
                             -F "artifactType=REST_API" \
                             -F "ruleCategory=SPECTRAL" \
-                            -F "rulesetContent=<rules/group-api-standards.yaml" \
+                            -F "rulesetContent=@rules/group-api-standards.yaml" \
                             > ruleset-created.json
 
                         echo "Create response:"
@@ -238,7 +238,7 @@ pipeline {
                     -F "ruleType=API_METADATA" \
                     -F "artifactType=REST_API" \
                     -F "ruleCategory=SPECTRAL" \
-                    -F "rulesetContent=<rules/group-api-standards.yaml"
+                    -F "rulesetContent=@rules/group-api-standards.yaml"
                 )
 
                 echo ""
