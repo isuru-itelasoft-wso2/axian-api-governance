@@ -87,54 +87,57 @@ pipeline {
         }
 
 
-        stage('Find Mvola Ruleset') {
-            steps {
+	stage('Find Mvola Ruleset') {
+    steps {
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'mvola-governance-admin',
-                        usernameVariable: 'MVOLA_USER',
-                        passwordVariable: 'MVOLA_PASS'
-                    )
-                ]) {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'mvola-governance-admin',
+                usernameVariable: 'MVOLA_USER',
+                passwordVariable: 'MVOLA_PASS'
+            )
+        ]) {
 
-                    sh '''
-                        set -e
+            sh '''
+                set -e
 
-                        echo "Searching for Group Level API Standards..."
+                echo "======================================"
+                echo "Finding Mvola Governance Ruleset"
+                echo "======================================"
 
-                        curl -sk \
-                            -u "$MVOLA_USER:$MVOLA_PASS" \
-                            -H "Accept: application/json" \
-                            --get \
-                            --data-urlencode "query=name:Group Level API Standards" \
-                            "$MVOLA_APIM_URL/api/am/governance/v1/rulesets" \
-                            > ruleset-response.json
+                curl -sk \
+                    -u "$MVOLA_USER:$MVOLA_PASS" \
+                    -H "Accept: application/json" \
+                    "$MVOLA_APIM_URL/api/am/governance/v1/rulesets?limit=100" \
+                    > ruleset-response.json
 
-                        echo "Ruleset response:"
-                        jq . ruleset-response.json
+                echo "Rulesets returned by Mvola:"
+                jq '.list[] | {id, name, ruleType, artifactType}' ruleset-response.json
 
-                        RULESET_ID=$(jq -r '.list[0].id // empty' ruleset-response.json)
+                RULESET_ID=$(jq -r '
+                    .list[]
+                    | select(.name == "Group Level API Standards")
+                    | .id
+                ' ruleset-response.json | head -n 1)
 
-                        if [ -z "$RULESET_ID" ]; then
+                if [ -z "$RULESET_ID" ]; then
 
-                            echo "Ruleset does not exist."
-                            echo "CREATE" > ruleset-action
+                    echo "Ruleset does not exist."
+                    echo "CREATE" > ruleset-action
 
-                        else
+                else
 
-                            echo "Ruleset found."
-                            echo "Ruleset ID: $RULESET_ID"
+                    echo "Ruleset found."
+                    echo "Ruleset ID: $RULESET_ID"
 
-                            echo "$RULESET_ID" > ruleset-id
-                            echo "UPDATE" > ruleset-action
+                    echo "$RULESET_ID" > ruleset-id
+                    echo "UPDATE" > ruleset-action
 
-                        fi
-                    '''
-                }
-            }
+                fi
+            '''
         }
-
+    }
+}
 
         stage('Create Mvola Ruleset') {
 
