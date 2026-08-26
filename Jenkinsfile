@@ -87,7 +87,7 @@ pipeline {
         }
 
 
-	stage('Find Mvola Ruleset') {
+	stage('Find Group Ruleset') {
     steps {
 
         withCredentials([
@@ -102,7 +102,7 @@ pipeline {
                 set -e
 
                 echo "======================================"
-                echo "Finding Mvola Governance Ruleset"
+                echo "Finding Group Governance Ruleset"
                 echo "======================================"
 
                 curl -sk \
@@ -139,7 +139,7 @@ pipeline {
     }
 }
 
-        stage('Create Mvola Ruleset') {
+        stage('Create Group Ruleset') {
 
             when {
                 expression {
@@ -196,7 +196,7 @@ pipeline {
         }
 
 	
-	stage('Update Mvola Ruleset') {
+	stage('Update Group Ruleset') {
 
     when {
         expression {
@@ -263,7 +263,7 @@ pipeline {
 }
 
 
-        stage('Verify Mvola Ruleset') {
+        stage('Verify Group Ruleset') {
 
             steps {
 
@@ -304,7 +304,7 @@ pipeline {
         }
 
 
-        stage('Find Mvola Governance Policy') {
+        stage('Find Group Governance Policy') {
 
             steps {
 
@@ -349,7 +349,7 @@ pipeline {
         }
 
 
-        stage('Get Existing Mvola Policy') {
+        stage('Get Existing Group Policy') {
 
             steps {
 
@@ -381,7 +381,7 @@ pipeline {
         }
 
 
-        stage('Update Mvola Policy') {
+        stage('Update Group Policy') {
 
             steps {
 
@@ -431,7 +431,7 @@ pipeline {
         }
 
 
-        stage('Verify Mvola Policy') {
+        stage('Verify Group Policy') {
 
             steps {
 

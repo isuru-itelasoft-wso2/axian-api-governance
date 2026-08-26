@@ -1,5 +1,26 @@
 rules:
 
+  organization-api-name:
+    given:
+      - "$.data"
+    severity: error
+    then:
+      function: pattern
+      field: "name"
+      functionOptions:
+        match: '^[A-Z][A-Z0-9]*-[A-Za-z0-9-]+-API$'
+    description: |-
+      The API name must follow the organization and domain naming convention:
+
+      <Organization>-<Domain>-API
+
+      Examples:
+      MVOLA-Customer-API
+      TIGO-Merchant-API
+      MVOLA-Payment-API
+      TIGO-Merchant-Management-API
+
+    message: "API name must follow the format <Organization>-<Domain>-API."
   group-api-version:
     given:
       - "$.data"
