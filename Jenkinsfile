@@ -195,55 +195,72 @@ pipeline {
             }
         }
 
+	
+	stage('Update Mvola Ruleset') {
 
-        stage('Update Mvola Ruleset') {
-
-            when {
-                expression {
-                    fileExists('ruleset-action') &&
-                    readFile('ruleset-action').trim() == 'UPDATE'
-                }
-            }
-
-            steps {
-
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'mvola-governance-admin',
-                        usernameVariable: 'MVOLA_USER',
-                        passwordVariable: 'MVOLA_PASS'
-                    )
-                ]) {
-
-                    sh '''
-                        set -e
-
-                        RULESET_ID=$(cat ruleset-id)
-
-                        echo "Updating ruleset:"
-                        echo "$RULESET_ID"
-
-                        curl -sk \
-                            -u "$MVOLA_USER:$MVOLA_PASS" \
-                            -X PUT \
-                            "$MVOLA_APIM_URL/api/am/governance/v1/rulesets/$RULESET_ID" \
-                            -H "Accept: application/json" \
-                            -F "name=Group Level API Standards" \
-                            -F "description=Axian Group API Governance Standards" \
-                            -F "ruleType=API_METADATA" \
-                            -F "artifactType=REST_API" \
-                            -F "ruleCategory=SPECTRAL" \
-                            -F "rulesetContent=<rules/group-api-standards.yaml" \
-                            > ruleset-updated.json
-
-                        echo "Update response:"
-                        jq . ruleset-updated.json
-
-                        echo "Ruleset updated successfully."
-                    '''
-                }
-            }
+    when {
+        expression {
+            fileExists('ruleset-action') &&
+            readFile('ruleset-action').trim() == 'UPDATE'
         }
+    }
+
+    steps {
+
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'mvola-governance-admin',
+                usernameVariable: 'MVOLA_USER',
+                passwordVariable: 'MVOLA_PASS'
+            )
+        ]) {
+
+            sh '''
+                set -e
+
+                RULESET_ID=$(cat ruleset-id)
+
+                echo "======================================"
+                echo "Updating Mvola Governance Ruleset"
+                echo "======================================"
+
+                echo "Ruleset ID: $RULESET_ID"
+
+                HTTP_CODE=$(curl -sk \
+                    -u "$MVOLA_USER:$MVOLA_PASS" \
+                    -o ruleset-updated.json \
+                    -w "%{http_code}" \
+                    -X PUT \
+                    "$MVOLA_APIM_URL/api/am/governance/v1/rulesets/$RULESET_ID" \
+                    -H "Accept: application/json" \
+                    -F "name=Group Level API Standards" \
+                    -F "description=Axian Group API Governance Standards" \
+                    -F "ruleType=API_METADATA" \
+                    -F "artifactType=REST_API" \
+                    -F "ruleCategory=SPECTRAL" \
+                    -F "rulesetContent=<rules/group-api-standards.yaml"
+                )
+
+                echo ""
+                echo "HTTP Status: $HTTP_CODE"
+
+                echo ""
+                echo "Update response:"
+                jq . ruleset-updated.json || cat ruleset-updated.json
+
+                if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+                    echo ""
+                    echo "ERROR: Ruleset update failed."
+                    echo "HTTP Status: $HTTP_CODE"
+                    exit 1
+                fi
+
+                echo ""
+                echo "Ruleset update API call succeeded."
+            '''
+        }
+    }
+}
 
 
         stage('Verify Mvola Ruleset') {
