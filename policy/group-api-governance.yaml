@@ -1,0 +1,10 @@
+name: Group API Design Standards
+
+rulesets:
+  - Group Level API Standards
+
+enforcement:
+  deploy:
+    error: BLOCK
+  publish:
+    error: BLOCK

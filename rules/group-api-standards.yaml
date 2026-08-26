@@ -1,0 +1,36 @@
+rules:
+
+  group-api-version:
+    given:
+      - "$.data"
+    severity: error
+    then:
+      function: pattern
+      field: "version"
+      functionOptions:
+        match: '^[0-9]+\.[0-9]+\.[0-9]+$'
+    description: |-
+      The API version must follow MAJOR.MINOR.PATCH format.
+
+      Valid:
+      1.0.0
+      1.2.3
+      2.0.0
+
+      Invalid:
+      v1
+      v1.0
+      1
+      1.0
+    message: "API version must follow MAJOR.MINOR.PATCH format, for example 1.0.0."
+
+  group-api-technical-owner:
+    given:
+      - "$.data.businessInformation"
+    severity: error
+    then:
+      function: truthy
+      field: "technicalOwner"
+    description: |-
+      Every Mvola API must have a technical owner.
+    message: "API technical owner must be set."
