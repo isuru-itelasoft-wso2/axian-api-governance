@@ -17,3 +17,11 @@ rules:
       function: pattern
       functionOptions:
         match: "^Authorization$"
+  group-advertiseInfo-apiOwner-mandatory:
+    description: "Every Group API must define a API Owner."
+    given:
+      - "$.data"
+    severity: error
+    then:
+      field: "advertiseInfo.apiOwner"
+      function: truthy
