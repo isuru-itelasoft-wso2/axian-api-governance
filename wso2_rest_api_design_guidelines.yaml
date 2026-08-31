@@ -1,0 +1,253 @@
+# ============================================================
+# WSO2-Axian REST API Design Guidelines
+# Custom OpCo API Governance Ruleset
+#
+# Target:
+#   WSO2 API Designer / Spectral
+#
+# Filename:
+#   wso2_rest_api_design_guidelines.yaml
+# ============================================================
+
+extends:
+  - spectral:oas
+
+documentationUrl: https://example.com/api-governance
+
+rules:
+
+  # ==========================================================
+  # API METADATA
+  # ==========================================================
+
+  api-title-required:
+    description: API title must be defined.
+    message: API title is required.
+    severity: error
+    given:
+      - $.info
+    then:
+      field: title
+      function: truthy
+
+  api-title-format:
+    description: API title must follow the OpCo API naming convention.
+    message: API title must follow <OPCO>-<Domain>-API.
+    severity: error
+    given:
+      - $.info.title
+    then:
+      function: pattern
+      functionOptions:
+        match: '^[A-Z][A-Z0-9]*-[A-Za-z0-9]+-API$'
+
+  api-description-required:
+    description: Every API must have a description.
+    message: API description is required.
+    severity: error
+    given:
+      - $.info
+    then:
+      field: description
+      function: truthy
+
+  api-version-required:
+    description: API version must be defined.
+    message: API version is required.
+    severity: error
+    given:
+      - $.info
+    then:
+      field: version
+      function: truthy
+
+  api-version-semver:
+    description: API version must follow semantic versioning.
+    message: API version must follow MAJOR.MINOR.PATCH.
+    severity: error
+    given:
+      - $.info.version
+    then:
+      function: pattern
+      functionOptions:
+        match: '^[0-9]+\.[0-9]+\.[0-9]+$'
+
+
+  # ==========================================================
+  # API OWNERSHIP
+  # ==========================================================
+
+  business-owner-required:
+    description: Business owner must be defined.
+    message: businessOwner is required.
+    severity: error
+    given:
+      - $.info.businessInformation
+    then:
+      field: businessOwner
+      function: truthy
+
+  business-owner-email-required:
+    description: Business owner email must be defined.
+    message: businessOwnerEmail is required.
+    severity: error
+    given:
+      - $.info.businessInformation
+    then:
+      field: businessOwnerEmail
+      function: truthy
+
+  business-owner-email-format:
+    description: Business owner email must be a valid email address.
+    message: businessOwnerEmail must contain a valid email address.
+    severity: error
+    given:
+      - $.info.businessInformation.businessOwnerEmail
+    then:
+      function: pattern
+      functionOptions:
+        match: '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+
+  technical-owner-required:
+    description: Technical owner must be defined.
+    message: technicalOwner is required.
+    severity: error
+    given:
+      - $.info.businessInformation
+    then:
+      field: technicalOwner
+      function: truthy
+
+  technical-owner-email-required:
+    description: Technical owner email must be defined.
+    message: technicalOwnerEmail is required.
+    severity: error
+    given:
+      - $.info.businessInformation
+    then:
+      field: technicalOwnerEmail
+      function: truthy
+
+  technical-owner-email-format:
+    description: Technical owner email must be a valid email address.
+    message: technicalOwnerEmail must contain a valid email address.
+    severity: error
+    given:
+      - $.info.businessInformation.technicalOwnerEmail
+    then:
+      function: pattern
+      functionOptions:
+        match: '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+
+
+  # ==========================================================
+  # SECURITY
+  # ==========================================================
+
+  security-scheme-required:
+    description: Every API must define at least one security scheme.
+    message: At least one security scheme must be defined.
+    severity: error
+    given:
+      - $
+    then:
+      field: components.securitySchemes
+      function: truthy
+
+  oauth2-security-scheme-required:
+    description: APIs must define an OAuth2 security scheme.
+    message: OAuth2 security scheme is required.
+    severity: error
+    given:
+      - $.components.securitySchemes
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          properties:
+            oauth2:
+              type: object
+              properties:
+                type:
+                  const: oauth2
+              required:
+                - type
+          required:
+            - oauth2
+
+  global-security-required:
+    description: API must define a global security requirement.
+    message: Global security requirement is required.
+    severity: error
+    given:
+      - $
+    then:
+      field: security
+      function: truthy
+
+  authorization-header-required:
+    description: Authorization header configuration must be defined.
+    message: authorizationHeader must be defined.
+    severity: error
+    given:
+      - $
+    then:
+      field: authorizationHeader
+      function: truthy
+
+  authorization-header-name:
+    description: Authorization header must be named Authorization.
+    message: authorizationHeader must be "Authorization".
+    severity: error
+    given:
+      - $.authorizationHeader
+    then:
+      function: pattern
+      functionOptions:
+        match: '^Authorization$'
+
+  # ==========================================================
+  # CUSTOM WSO2 / OPCO METADATA
+  # ==========================================================
+
+  opco-required:
+    description: API must identify the owning OpCo.
+    message: x-opco is required.
+    severity: error
+    given:
+      - $
+    then:
+      field: x-opco
+      function: truthy
+
+  opco-valid-value:
+    description: OpCo must be one of the approved values.
+    message: x-opco must be MVOLA, TIGO, or GROUP.
+    severity: error
+    given:
+      - $.x-opco
+    then:
+      function: pattern
+      functionOptions:
+        match: '^(MVOLA|TIGO|GROUP)$'
+
+  api-domain-required:
+    description: API domain must be defined.
+    message: x-api-domain is required.
+    severity: error
+    given:
+      - $
+    then:
+      field: x-api-domain
+      function: truthy
+
+  api-classification-required:
+    description: API classification must be defined.
+    message: x-api-classification is required.
+    severity: warn
+    given:
+      - $
+    then:
+      field: x-api-classification
+      function: truthy
