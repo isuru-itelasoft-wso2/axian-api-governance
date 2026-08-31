@@ -25,3 +25,11 @@ rules:
     then:
       field: "advertiseInfo.apiOwner"
       function: truthy
+  group-api-visibilty-mandatory:
+    description: "Every Group API must be visibility Public"
+    given:
+      - "$.data"
+    severity: error
+    then:
+      field: "visibility"
+      function: truthy
