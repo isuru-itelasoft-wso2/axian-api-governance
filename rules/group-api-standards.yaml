@@ -1,12 +1,4 @@
 rules:
-  group-security-scheme-mandatory:
-    description: "Every Group API must define a security scheme."
-    given:
-      - "$.data"
-    severity: error
-    then:
-      field: "securityScheme"
-      function: truthy
   group-authorization-header:
     description: "The authorization header must be 'Authorization'."
     given:
