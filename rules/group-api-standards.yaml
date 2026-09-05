@@ -25,3 +25,11 @@ rules:
     then:
       field: "visibility"
       function: truthy
+  group-security-scheme-mandatory:
+    description: "Every Group API must define a security scheme."
+    given:
+      - "$.data"
+    severity: error
+    then:
+      field: "securityScheme"
+      function: truthy
